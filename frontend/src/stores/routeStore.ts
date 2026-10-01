@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { TransitRoute } from '@/types'
 import { db, deleteRow, loadAll, putRow } from '@/hooks/usePersistentStore'
 import { distanceKm, estimateDurationH } from '@/utils/geo'
+import { assertWritableSeason, seasonStore } from './seasonStore'
 
 export interface RouteState {
   rows: TransitRoute[]
@@ -20,22 +21,32 @@ export const routeStore = create<RouteState>((set, get) => ({
   rows: [],
   loaded: false,
   hydrate: async () => {
-    const rows = await loadAll<TransitRoute>(db.routes)
+    const seasonId = seasonStore.getState().currentSeasonId
+    const rows = seasonId
+      ? await db.routes.where('seasonId').equals(seasonId).toArray()
+      : await loadAll<TransitRoute>(db.routes)
     rows.sort((a, b) => a.departAt.localeCompare(b.departAt))
     set({ rows, loaded: true })
   },
   save: async (row) => {
-    await putRow<TransitRoute>(db.routes, row)
+    assertWritableSeason()
+    const seasonId = seasonStore.getState().currentSeasonId
+    await putRow<TransitRoute>(db.routes, { ...row, seasonId: row.seasonId || seasonId })
     await get().hydrate()
   },
   remove: async (id) => {
+    assertWritableSeason()
     await deleteRow<TransitRoute>(db.routes, id)
     await get().hydrate()
   },
   rebuildFromOrder: async (orderedDropIds, meta) => {
-    const existing = await loadAll<TransitRoute>(db.routes)
+    assertWritableSeason()
+    const seasonId = seasonStore.getState().currentSeasonId
+    // 只清当前季的路线，往季路线不动
+    const existing = await db.routes.where('seasonId').equals(seasonId).toArray()
     await Promise.all(existing.map((row) => deleteRow<TransitRoute>(db.routes, row.id)))
-    const points = await loadAll<{ id: string; longitude: number; latitude: number }>(db.dropPoints)
+    // 只取当前季的投放点
+    const points = await db.dropPoints.where('seasonId').equals(seasonId).toArray()
     const lookup = new Map(points.map((item) => [item.id, item]))
     for (let i = 1; i < orderedDropIds.length; i += 1) {
       const from = lookup.get(orderedDropIds[i - 1])
@@ -44,6 +55,7 @@ export const routeStore = create<RouteState>((set, get) => ({
       const km = distanceKm(from, to)
       await putRow<TransitRoute>(db.routes, {
         id: `rt_${Date.now().toString(36)}_${i}`,
+        seasonId,
         fromDropId: from.id,
         toDropId: to.id,
         distanceKm: km,

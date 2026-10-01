@@ -5,6 +5,8 @@ export type VehicleType = (typeof VEHICLE_TYPES)[number]
 /** TransitRoute 转场路线 */
 export interface TransitRoute {
   id: string
+  /** 所属授粉季 */
+  seasonId: string
   /** 出发投放点 */
   fromDropId: string
   /** 到达投放点 */

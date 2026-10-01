@@ -8,6 +8,7 @@ import { usePersistentStore } from '@/hooks/usePersistentStore'
 import { orchardStore } from '@/stores/orchardStore'
 import { droppointStore } from '@/stores/droppointStore'
 import { routeStore } from '@/stores/routeStore'
+import { useSeasonReadonly } from '@/stores/seasonStore'
 import { distanceKm, estimateDurationH, routeLegs } from '@/utils/geo'
 
 /** 转场路线规划：地图上依次选点生成顺序与里程，支持拖动调整顺序并重算 */
@@ -15,6 +16,7 @@ export default function RoutesPage(): JSX.Element {
   const orchards = usePersistentStore(orchardStore, (state) => state.rows)
   const dropPoints = usePersistentStore(droppointStore, (state) => state.rows)
   const routes = usePersistentStore(routeStore, (state) => state.rows)
+  const readonly = useSeasonReadonly()
 
   const [orderedIds, setOrderedIds] = useState<string[]>([])
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -90,7 +92,7 @@ export default function RoutesPage(): JSX.Element {
         </div>
         <Space>
           <Button onClick={() => setOrderedIds([])}>清空顺序</Button>
-          <Button type="primary" onClick={() => void generate()}>
+          <Button type="primary" onClick={() => void generate()} disabled={readonly}>
             生成并保存路线
           </Button>
         </Space>
@@ -228,7 +230,13 @@ export default function RoutesPage(): JSX.Element {
               key: 'action',
               width: 80,
               render: (_, record: TransitRoute) => (
-                <Button size="small" danger type="link" onClick={() => void routeStore.getState().remove(record.id)}>
+                <Button
+                  size="small"
+                  danger
+                  type="link"
+                  disabled={readonly}
+                  onClick={() => void routeStore.getState().remove(record.id)}
+                >
                   删除
                 </Button>
               )

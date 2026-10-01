@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
-import { Button, Card, Col, Radio, Row, Space, Table, Tag, Typography, message } from 'antd'
+import { Alert, Button, Card, Col, Radio, Row, Space, Table, Tag, Typography, message } from 'antd'
 import dayjs from 'dayjs'
 import type { BeeColony, DropPoint, Orchard, TransitRoute } from '@/types'
 import { suggestColonyBoxes } from '@/types'
-import { usePersistentStore } from '@/hooks/usePersistentStore'
+import { db, usePersistentStore } from '@/hooks/usePersistentStore'
 import { orchardStore } from '@/stores/orchardStore'
 import { colonyStore } from '@/stores/colonyStore'
 import { droppointStore } from '@/stores/droppointStore'
 import { routeStore } from '@/stores/routeStore'
+import { seasonStore, useSeasonReadonly } from '@/stores/seasonStore'
 import { downloadCsv, downloadJson } from '@/utils/export'
 import { bloomDays } from '@/utils/geo'
 
@@ -31,7 +32,15 @@ export default function ExportPage(): JSX.Element {
   const colonies = usePersistentStore(colonyStore, (state) => state.rows)
   const dropPoints = usePersistentStore(droppointStore, (state) => state.rows)
   const routes = usePersistentStore(routeStore, (state) => state.rows)
+  const seasons = usePersistentStore(seasonStore, (state) => state.rows)
+  const currentSeason = usePersistentStore(seasonStore, (state) =>
+    state.rows.find((item) => item.id === state.currentSeasonId)
+  )
+  const readonly = useSeasonReadonly()
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('landscape')
+
+  /** 文件名后缀：带上当前季名，封存季也照出 */
+  const fileSuffix = currentSeason ? `-${currentSeason.name}` : ''
 
   const orchardName = (id: string): string => orchards.find((item) => item.id === id)?.name ?? '未知地块'
 
@@ -100,7 +109,7 @@ export default function ExportPage(): JSX.Element {
   )
 
   function exportSchedule(): void {
-    downloadCsv('授粉安排清单.csv', scheduleRows as unknown as Record<string, unknown>[], [
+    downloadCsv(`授粉安排清单${fileSuffix}.csv`, scheduleRows as unknown as Record<string, unknown>[], [
       { key: 'orchard', label: '地块' },
       { key: 'crop', label: '作物' },
       { key: 'areaMu', label: '面积(亩)' },
@@ -117,7 +126,7 @@ export default function ExportPage(): JSX.Element {
   }
 
   function exportRoutes(): void {
-    downloadCsv('转场路线表.csv', routeRows as unknown as Record<string, unknown>[], [
+    downloadCsv(`转场路线表${fileSuffix}.csv`, routeRows as unknown as Record<string, unknown>[], [
       { key: 'from', label: '出发投放点' },
       { key: 'to', label: '到达投放点' },
       { key: 'distanceKm', label: '里程(km)' },
@@ -130,15 +139,23 @@ export default function ExportPage(): JSX.Element {
     message.success('转场路线表已导出')
   }
 
-  function exportBackup(): void {
-    downloadJson('gbbeeroute-backup.json', {
+  async function exportBackup(): Promise<void> {
+    // 全量备份：包含全部授粉季的底账与作业数据，一条都不丢
+    const [allOrchards, allColonies, allDropPoints, allRoutes] = await Promise.all([
+      db.orchards.toArray(),
+      db.colonies.toArray(),
+      db.dropPoints.toArray(),
+      db.routes.toArray()
+    ])
+    downloadJson(`gbbeeroute-backup${fileSuffix}.json`, {
       exportedAt: new Date().toISOString(),
-      orchards,
-      colonies,
-      dropPoints,
-      routes
+      seasons,
+      orchards: allOrchards,
+      colonies: allColonies,
+      dropPoints: allDropPoints,
+      routes: allRoutes
     })
-    message.success('全量数据已导出为 JSON 备份')
+    message.success('全量数据已导出为 JSON 备份（含全部授粉季）')
   }
 
   return (
@@ -160,17 +177,27 @@ export default function ExportPage(): JSX.Element {
         </Space>
       </div>
 
+      {readonly ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={`「${currentSeason?.name}」已封存：导出与打印不受影响，可随时留档或给园主核对`}
+        />
+      ) : null}
+
       <Card size="small">
         <Space wrap>
           <Button type="primary" onClick={exportSchedule}>
             导出授粉安排清单（CSV）
           </Button>
           <Button onClick={exportRoutes}>导出转场路线表（CSV）</Button>
-          <Button onClick={exportBackup}>导出全量 JSON 备份</Button>
-          <Tag>地块 {orchards.length}</Tag>
-          <Tag>蜂群 {colonies.length}</Tag>
-          <Tag>投放点 {dropPoints.length}</Tag>
-          <Tag>路线 {routes.length}</Tag>
+          <Button onClick={() => void exportBackup()}>导出全量 JSON 备份（含全部季）</Button>
+          <Tag>当前季 · 地块 {orchards.length}</Tag>
+          <Tag>当前季 · 蜂群 {colonies.length}</Tag>
+          <Tag>当前季 · 投放点 {dropPoints.length}</Tag>
+          <Tag>当前季 · 路线 {routes.length}</Tag>
+          <Tag color="blue">共 {seasons.length} 个授粉季</Tag>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             生成时间 {dayjs().format('YYYY-MM-DD HH:mm')}
           </Typography.Text>

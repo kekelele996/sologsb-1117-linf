@@ -5,10 +5,12 @@ import type { DropPoint, Orchard } from '@/types'
 import { ACCESSIBILITIES, CROPS, suggestColonyBoxes } from '@/types'
 import CoordPicker from '@/components/common/CoordPicker'
 import FlowerWindowBar from '@/components/common/FlowerWindowBar'
+import MasterSeasonTag from '@/components/common/MasterSeasonTag'
 import { usePersistentStore } from '@/hooks/usePersistentStore'
 import { orchardStore } from '@/stores/orchardStore'
 import { droppointStore } from '@/stores/droppointStore'
 import { colonyStore } from '@/stores/colonyStore'
+import { useSeasonReadonly } from '@/stores/seasonStore'
 import { bloomDays } from '@/utils/geo'
 import { uid } from '@/utils/id'
 
@@ -40,6 +42,7 @@ export default function OrchardsPage(): JSX.Element {
   const orchards = usePersistentStore(orchardStore, (state) => state.rows)
   const dropPoints = usePersistentStore(droppointStore, (state) => state.rows)
   const colonies = usePersistentStore(colonyStore, (state) => state.rows)
+  const readonly = useSeasonReadonly()
 
   const [orchardModal, setOrchardModal] = useState(false)
   const [editingOrchard, setEditingOrchard] = useState<Orchard | null>(null)
@@ -101,6 +104,8 @@ export default function OrchardsPage(): JSX.Element {
     const values = await orchardForm.validateFields()
     const row: Orchard = {
       id: editingOrchard?.id ?? uid('orc'),
+      seasonId: '',
+      masterId: editingOrchard?.masterId ?? '',
       name: values.name.trim(),
       crop: values.crop,
       areaMu: Number(values.areaMu) || 0,
@@ -154,6 +159,7 @@ export default function OrchardsPage(): JSX.Element {
     const values = await dropForm.validateFields()
     const row: DropPoint = {
       id: uid('dp'),
+      seasonId: '',
       orchardId: dropOwner.id,
       longitude: dropCoord.longitude,
       latitude: dropCoord.latitude,
@@ -180,7 +186,7 @@ export default function OrchardsPage(): JSX.Element {
             录入面积与需蜂强度后自动算出建议箱数；可达性以标签标记。每个地块可维护多个蜂群投放点（含可容纳箱数与时间窗）。
           </p>
         </div>
-        <Button type="primary" onClick={openCreate}>
+        <Button type="primary" onClick={openCreate} disabled={readonly}>
           新建地块
         </Button>
       </div>
@@ -193,6 +199,7 @@ export default function OrchardsPage(): JSX.Element {
               title={
                 <Space wrap>
                   <span>{orchard.name}</span>
+                  <MasterSeasonTag masterId={orchard.masterId} kind="orchard" />
                   <Tag color="blue">{orchard.crop}</Tag>
                   <Tag color={orchard.accessibility === '大车可达' ? 'green' : orchard.accessibility === '仅小车' ? 'gold' : 'red'}>
                     {orchard.accessibility}
@@ -202,13 +209,13 @@ export default function OrchardsPage(): JSX.Element {
               }
               extra={
                 <Space>
-                  <Button size="small" onClick={() => openEdit(orchard)}>
+                  <Button size="small" onClick={() => openEdit(orchard)} disabled={readonly}>
                     编辑
                   </Button>
-                  <Button size="small" onClick={() => openDrop(orchard)}>
+                  <Button size="small" onClick={() => openDrop(orchard)} disabled={readonly}>
                     新增投放点
                   </Button>
-                  <Button size="small" danger onClick={() => void removeOrchard(orchard)}>
+                  <Button size="small" danger onClick={() => void removeOrchard(orchard)} disabled={readonly}>
                     删除
                   </Button>
                 </Space>
@@ -242,7 +249,13 @@ export default function OrchardsPage(): JSX.Element {
                     key: 'action',
                     width: 80,
                     render: (_, record: DropPoint) => (
-                      <Button size="small" danger type="link" onClick={() => void droppointStore.getState().remove(record.id)}>
+                      <Button
+                        size="small"
+                        danger
+                        type="link"
+                        disabled={readonly}
+                        onClick={() => void droppointStore.getState().remove(record.id)}
+                      >
                         删除
                       </Button>
                     )

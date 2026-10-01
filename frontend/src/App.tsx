@@ -1,10 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Layout, Menu, Statistic, Typography } from 'antd'
+import { Alert, Layout, Menu, Statistic, Typography } from 'antd'
 import { usePersistentStore } from '@/hooks/usePersistentStore'
 import { orchardStore } from '@/stores/orchardStore'
 import { colonyStore } from '@/stores/colonyStore'
 import { droppointStore } from '@/stores/droppointStore'
 import { routeStore } from '@/stores/routeStore'
+import { seasonStore, useSeasonReadonly } from '@/stores/seasonStore'
+import SeasonSwitcher from '@/components/SeasonSwitcher'
 
 const { Sider, Header, Content } = Layout
 
@@ -16,12 +18,16 @@ const NAV = [
   { key: '/export', label: '导出与打印' }
 ]
 
-/** 应用外壳：左侧导航 + 顶部统计 + 路由出口 */
+/** 应用外壳：左侧导航 + 顶部季账切换 + 封存横幅 + 路由出口 */
 export default function AppLayout(): JSX.Element {
   const orchards = usePersistentStore(orchardStore, (state) => state.rows)
   const colonies = usePersistentStore(colonyStore, (state) => state.rows)
   const dropPoints = usePersistentStore(droppointStore, (state) => state.rows)
   const routes = usePersistentStore(routeStore, (state) => state.rows)
+  const currentSeason = usePersistentStore(seasonStore, (state) =>
+    state.rows.find((item) => item.id === state.currentSeasonId)
+  )
+  const readonly = useSeasonReadonly()
 
   const totalKm = Math.round(routes.reduce((sum, item) => sum + item.distanceKm, 0) * 100) / 100
 
@@ -45,22 +51,53 @@ export default function AppLayout(): JSX.Element {
           }))}
         />
         <div style={{ padding: 16 }}>
-          <Statistic title={<span style={{ color: '#a9b3ad', fontSize: 12 }}>已入册地块</span>} value={orchards.length} valueStyle={{ color: '#f2c14e' }} />
-          <Statistic title={<span style={{ color: '#a9b3ad', fontSize: 12 }}>蜂群 / 投放点</span>} value={`${colonies.length} / ${dropPoints.length}`} valueStyle={{ color: '#f2c14e', fontSize: 18 }} />
-          <Statistic title={<span style={{ color: '#a9b3ad', fontSize: 12 }}>转场里程合计</span>} value={`${totalKm} km`} valueStyle={{ color: '#f2c14e', fontSize: 18 }} />
+          <Statistic
+            title={<span style={{ color: '#a9b3ad', fontSize: 12 }}>已入册地块（当季）</span>}
+            value={orchards.length}
+            valueStyle={{ color: '#f2c14e' }}
+          />
+          <Statistic
+            title={<span style={{ color: '#a9b3ad', fontSize: 12 }}>蜂群 / 投放点（当季）</span>}
+            value={`${colonies.length} / ${dropPoints.length}`}
+            valueStyle={{ color: '#f2c14e', fontSize: 18 }}
+          />
+          <Statistic
+            title={<span style={{ color: '#a9b3ad', fontSize: 12 }}>转场里程合计（当季）</span>}
+            value={`${totalKm} km`}
+            valueStyle={{ color: '#f2c14e', fontSize: 18 }}
+          />
           <Typography.Paragraph style={{ color: '#7f8d82', fontSize: 11, marginTop: 12, marginBottom: 0 }}>
-            数据保存在浏览器 IndexedDB，无需后端服务
+            数据按季建账，保存在浏览器 IndexedDB
           </Typography.Paragraph>
         </div>
       </Sider>
       <Layout>
-        <Header style={{ background: '#fff', borderBottom: '1px solid #e6ecf1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: 24 }}>
-          <Typography.Text strong>果园地块 → 花期 → 蜂群投放点 → 转场路线</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            地图优先使用高德 JS API，未配置 key 时自动降级为本地 SVG 网格视图
+        <Header
+          style={{
+            background: '#fff',
+            borderBottom: '1px solid #e6ecf1',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingInline: 24,
+            gap: 16
+          }}
+        >
+          <Typography.Text strong>
+            {currentSeason ? `当前授粉季：${currentSeason.name}` : '果园地块 → 花期 → 蜂群投放点 → 转场路线'}
           </Typography.Text>
+          <SeasonSwitcher />
         </Header>
         <Content style={{ padding: 20 }}>
+          {readonly ? (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={`「${currentSeason?.name}」已封存：往季数据仅可查看与导出，不能修改`}
+              description="如需调整，请用右上角季账切换器切回进行中的季，或开新季（地块与蜂群底账会带入新季，投放点与路线不带入）。"
+            />
+          ) : null}
           <Outlet />
         </Content>
       </Layout>

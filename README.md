@@ -66,9 +66,10 @@ sologsb-1117/
 │   ├── nginx.conf              # try_files 前端路由回落 + gzip
 │   ├── public/favicon.svg
 │   └── src/
-│       ├── types/              # orchard.ts / colony.ts / droppoint.ts / route.ts / index.ts
-│       ├── stores/             # orchardStore / colonyStore / droppointStore / routeStore（Zustand）
-│       ├── components/common/  # RouteMap / FlowerWindowBar / StatusTag / CoordPicker
+│       ├── types/              # orchard.ts / colony.ts / droppoint.ts / route.ts / season.ts / index.ts
+│       ├── stores/             # seasonStore（季账）/ orchardStore / colonyStore / droppointStore / routeStore / hydrate
+│       ├── components/common/  # RouteMap / FlowerWindowBar / StatusTag / CoordPicker / MasterSeasonTag
+│       ├── components/         # SeasonSwitcher（季账切换 / 开新季 / 封存）
 │       ├── hooks/              # useAmap / usePersistentStore
 │       ├── pages/              # SchedulePage / OrchardsPage / ColoniesPage / RoutesPage / ExportPage
 │       ├── router/index.tsx
@@ -77,15 +78,22 @@ sologsb-1117/
 
 ## 六、数据模型与存储
 
+**一季一份账**：所有业务数据按授粉季（`Season`）隔离，右上角可切换季、开新季、封存往季。
+
 | 模型 | 说明 | Dexie 表 |
 | --- | --- | --- |
-| Orchard 果园地块 | 地块名、作物、面积、经纬度、盛花期起止、需蜂强度（箱/亩）、园主联系方式、可达性、历史授粉年份 | `orchards` |
-| BeeColony 蜂群 | 群号、蜂种、群势（足框）、箱型、当前所在地块、状态（待投放/在园/转场中/回场）、最近检查日期、健康备注 | `colonies` |
-| DropPoint 投放点 | 所属地块、坐标、编号、可容纳箱数、遮阴条件、水源距离、投放时间窗、撤场时间、责任人、安排群号 | `dropPoints` |
-| TransitRoute 转场路线 | 出发/到达投放点、预计里程与耗时、车辆类型、出发时刻、风险备注、实际记录 | `routes` |
+| Season 授粉季 | 季名、年份、状态（进行中 / 已封存）、开季与封存时间 | `seasons` |
+| Orchard 果园地块 | 地块名、作物、面积、经纬度、盛花期起止、需蜂强度（箱/亩）、园主联系方式、可达性、历史授粉年份；含 `seasonId` 与 `masterId` | `orchards` |
+| BeeColony 蜂群 | 群号、蜂种、群势（足框）、箱型、当前所在地块、状态（待投放/在园/转场中/回场）、最近检查日期、健康备注；含 `seasonId` 与 `masterId` | `colonies` |
+| DropPoint 投放点 | 所属地块、坐标、编号、可容纳箱数、遮阴条件、水源距离、投放时间窗、撤场时间、责任人、安排群号；含 `seasonId` | `dropPoints` |
+| TransitRoute 转场路线 | 出发/到达投放点、预计里程与耗时、车辆类型、出发时刻、风险备注、实际记录；含 `seasonId` | `routes` |
 
 - 数据库名 `gbbeeroute`，`meta` 表保存 `schemaVersion`；
 - `version(2)` 升级迁移会为历史投放点补齐「可容纳箱数」（默认 8 箱）；
+- `version(3)` 起**分季建账**：四张业务表加 `seasonId` 按季隔离，地块 / 蜂群加 `masterId` 标识底账身份；
+- **开新季**：地块与蜂群整份复制到新季（换发新行 id、保留同一 `masterId`——跨季认得出是同一条底账；当季改花期 / 群势只影响当季副本，往季不变）；投放点与转场路线**不带入**，蜂群状态重置为「待投放」、上园状态清空（等价于手工清空上一季）；开季时可选择同时封存上一季；
+- **封存往季**：已封存的季只能查看与导出（store 层写入守卫 + 界面全局禁用编辑），数据一条不丢；
+- **旧数据升级**：v3 迁移把升级前的旧数据全部归入最早一季（按数据中最早年份命名，标注「升级导入」），不混入新季的冲突判定与箱位核算；
 - 数据仅存于浏览器本地，容器无状态、不挂载命名卷。
 
 ## 七、主要页面
@@ -96,7 +104,9 @@ sologsb-1117/
 | `/orchards` | 果园地块管理：面积与需蜂强度自动算建议箱数、可达性标记、花期重叠提示、投放点维护（含坐标拾取） |
 | `/colonies` | 蜂群台账：按群势与状态筛选，批量改状态、批量记录检查备注 |
 | `/routes` | 转场路线规划：地图依次选点生成顺序与里程，拖动或上下移动调整顺序并实时重算，写回路线表 |
-| `/export` | 导出授粉安排清单 / 转场路线表（CSV）、全量 JSON 备份，并提供横向/纵向打印视图 |
+| `/export` | 导出当季授粉安排清单 / 转场路线表（CSV，文件名带季名）、全量 JSON 备份（**含全部授粉季**），并提供横向/纵向打印视图；封存季可照常导出 |
+
+**季账操作**（右上角）：切换授粉季；「开新季」带入地块与蜂群底账（投放点、路线与上园状态不带）；「封存本季」后往季只读、可查看可导出。
 
 ## 八、计算约定
 

@@ -13,6 +13,10 @@ export type BoxType = (typeof BOX_TYPES)[number]
 /** BeeColony 蜂群 */
 export interface BeeColony {
   id: string
+  /** 所属授粉季 */
+  seasonId: string
+  /** 底账标识：跨季开季时保留同一 masterId，各季群势互不影响 */
+  masterId: string
   /** 群号 */
   code: string
   species: BeeSpecies

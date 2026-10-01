@@ -4,15 +4,18 @@ import dayjs from 'dayjs'
 import type { BeeColony, ColonyStatus } from '@/types'
 import { BEE_SPECIES, BOX_TYPES, COLONY_STATUSES } from '@/types'
 import StatusTag from '@/components/common/StatusTag'
+import MasterSeasonTag from '@/components/common/MasterSeasonTag'
 import { usePersistentStore } from '@/hooks/usePersistentStore'
 import { colonyStore } from '@/stores/colonyStore'
 import { orchardStore } from '@/stores/orchardStore'
+import { useSeasonReadonly } from '@/stores/seasonStore'
 import { uid } from '@/utils/id'
 
 /** 蜂群台账：按群势与状态筛选，支持批量改状态与记录检查备注 */
 export default function ColoniesPage(): JSX.Element {
   const colonies = usePersistentStore(colonyStore, (state) => state.rows)
   const orchards = usePersistentStore(orchardStore, (state) => state.rows)
+  const readonly = useSeasonReadonly()
 
   const [statusFilter, setStatusFilter] = useState<ColonyStatus | ''>('')
   const [minFrames, setMinFrames] = useState(0)
@@ -85,6 +88,8 @@ export default function ColoniesPage(): JSX.Element {
     }
     const row: BeeColony = {
       id: editing?.id ?? uid('col'),
+      seasonId: '',
+      masterId: editing?.masterId ?? '',
       code: values.code.trim(),
       species: values.species,
       strengthFrames: Number(values.strengthFrames) || 0,
@@ -132,7 +137,7 @@ export default function ColoniesPage(): JSX.Element {
             按群势与状态筛选蜂群；支持多选批量改状态与统一记录检查备注（会同步最近检查日期）。
           </p>
         </div>
-        <Button type="primary" onClick={openCreate}>
+        <Button type="primary" onClick={openCreate} disabled={readonly}>
           新增蜂群
         </Button>
       </div>
@@ -164,7 +169,9 @@ export default function ColoniesPage(): JSX.Element {
                 onChange={(value) => setBatchStatus(value)}
                 options={COLONY_STATUSES.map((item) => ({ value: item, label: `改为 ${item}` }))}
               />
-              <Button onClick={() => void applyBatchStatus()}>批量改状态</Button>
+              <Button onClick={() => void applyBatchStatus()} disabled={readonly}>
+                批量改状态
+              </Button>
               <Input
                 style={{ width: 200 }}
                 placeholder="检查备注"
@@ -172,7 +179,9 @@ export default function ColoniesPage(): JSX.Element {
                 onChange={(event) => setCheckNote(event.target.value)}
               />
               <DatePicker value={checkDate} onChange={(value) => setCheckDate(value ?? dayjs())} />
-              <Button onClick={() => void applyCheckNote()}>批量记录检查</Button>
+              <Button onClick={() => void applyCheckNote()} disabled={readonly}>
+                批量记录检查
+              </Button>
             </Space>
           </Col>
         </Row>
@@ -185,7 +194,12 @@ export default function ColoniesPage(): JSX.Element {
           pagination={false}
           rowSelection={{ selectedRowKeys: selectedKeys, onChange: (keys) => setSelectedKeys(keys as string[]) }}
           columns={[
-            { title: '群号', dataIndex: 'code', key: 'code', width: 90 },
+            { title: '群号', dataIndex: 'code', key: 'code', width: 120, render: (value: string, record: BeeColony) => (
+              <Space size={4} wrap>
+                {value}
+                <MasterSeasonTag masterId={record.masterId} kind="colony" />
+              </Space>
+            ) },
             { title: '蜂种', dataIndex: 'species', key: 'species', width: 80 },
             {
               title: '群势',
@@ -215,10 +229,16 @@ export default function ColoniesPage(): JSX.Element {
               width: 140,
               render: (_, record: BeeColony) => (
                 <Space>
-                  <Button size="small" type="link" onClick={() => openEdit(record)}>
+                  <Button size="small" type="link" onClick={() => openEdit(record)} disabled={readonly}>
                     编辑
                   </Button>
-                  <Button size="small" type="link" danger onClick={() => void colonyStore.getState().remove(record.id)}>
+                  <Button
+                    size="small"
+                    type="link"
+                    danger
+                    onClick={() => void colonyStore.getState().remove(record.id)}
+                    disabled={readonly}
+                  >
                     删除
                   </Button>
                 </Space>

@@ -1,6 +1,8 @@
 /** DropPoint 投放点 */
 export interface DropPoint {
   id: string
+  /** 所属授粉季 */
+  seasonId: string
   orchardId: string
   longitude: number
   latitude: number

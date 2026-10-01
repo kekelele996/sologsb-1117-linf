@@ -9,6 +9,10 @@ export type Accessibility = (typeof ACCESSIBILITIES)[number]
 /** Orchard 果园地块 */
 export interface Orchard {
   id: string
+  /** 所属授粉季 */
+  seasonId: string
+  /** 底账标识：跨季开季时保留同一 masterId，各季内容互不影响 */
+  masterId: string
   /** 地块名 */
   name: string
   crop: Crop
