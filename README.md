@@ -36,7 +36,7 @@ VITE_AMAP_KEY=            # 可选，留空即自动降级为本地 SVG 网格�
 | 状态管理 | Zustand |
 | 路由 | React Router 6（nginx `try_files` 回落） |
 | 构建 | Vite 5 |
-| 本地存储 | IndexedDB（Dexie 封装，含 `schemaVersion` 与升级迁移） |
+| 本地存储 | IndexedDB（Dexie 封装，含 `schemaVersion` 与升级迁移，v3 起一季一份账） |
 | 部署 | 多阶段 Dockerfile：`node:20-alpine` 构建 → `nginx:alpine` 托管 |
 
 ## 三、高德地图 Key 与降级策略
@@ -66,26 +66,42 @@ sologsb-1117/
 │   ├── nginx.conf              # try_files 前端路由回落 + gzip
 │   ├── public/favicon.svg
 │   └── src/
-│       ├── types/              # orchard.ts / colony.ts / droppoint.ts / route.ts / index.ts
-│       ├── stores/             # orchardStore / colonyStore / droppointStore / routeStore（Zustand）
-│       ├── components/common/  # RouteMap / FlowerWindowBar / StatusTag / CoordPicker
-│       ├── hooks/              # useAmap / usePersistentStore
+│       ├── types/              # season.ts / orchard.ts / colony.ts / droppoint.ts / route.ts / index.ts
+│       ├── stores/             # seasonStore / orchardStore / colonyStore / droppointStore / routeStore（Zustand）
+│       ├── components/common/  # RouteMap / FlowerWindowBar / StatusTag / CoordPicker / SeasonSwitcher
+│       ├── hooks/              # useAmap / usePersistentStore / useSeason
 │       ├── pages/              # SchedulePage / OrchardsPage / ColoniesPage / RoutesPage / ExportPage
 │       ├── router/index.tsx
 │       └── utils/              # geo.ts / export.ts / id.ts
+└── frontend/scripts/verify-seasons.ts   # 数据层端到端断言（v2→v3 迁移 / 开季 / 封存只读，`npm run verify:seasons`）
 ```
 
-## 六、数据模型与存储
+## 六、数据模型与授粉季账套（一季一份账）
+
+蜂场以「授粉季」为周期作业。**每个授粉季是一份独立的账**，顶栏的授粉季切换器用于选择查看与开季，规则如下：
+
+| 规则 | 实现 |
+| --- | --- |
+| 一季一份账 | 新增 `seasons` 表（`active` 进行中 / `sealed` 已封存）；地块季行、蜂群季行、投放点、路线全部挂 `seasonId` |
+| 开季只带底账 | 开新季时封存旧当季、新建活动季：**地块底账带过来（花期作为新季初值预填）、蜂群底账带过来（群势预填，上园状态重置为「待投放」，清空当前地块/检查记录）**；**投放点与转场路线不带** |
+| 跨季认得出同一条底账 | 地块与蜂群各有独立底账表（`orchardBases` / `colonyBases`）；季行用 `baseId` 锚定底账，新季节行重新发号但 `baseId` 沿用，跨季仍能认出是同一地块 / 同一群 |
+| 当季改不影响往季 | 季行是整行快照：当季改花期、需蜂强度、群势只改当季行；底账只跟身份/档案字段（地块名、面积、坐标、群号、蜂种、箱型），**封存季行永不被改写** |
+| 地块 / 蜂群各自维护 | 底账分两张表，互不引用；群号是蜂群底账身份（当季按同号认回同一群） |
+| 旧数据升级不丢不混 | v2→v3 迁移把所有旧数据（含投放点、路线）整体归入封存季 `season_legacy`（季列表中永远排第一），同时自动开一个只带底账的活动新季；旧投放点/路线不进当季，因此**不会混进当季的冲突判定与箱位核算** |
+| 封存后只能看和导出 | 封存季所有写操作（地块/蜂群/投放点/路线增删改、批量操作、生成路线）UI 禁用且数据层 `requireActiveSeason` 守卫拒绝；查看、打印、CSV/JSON 导出仍可用，导出为当前季自包含账 |
 
 | 模型 | 说明 | Dexie 表 |
 | --- | --- | --- |
-| Orchard 果园地块 | 地块名、作物、面积、经纬度、盛花期起止、需蜂强度（箱/亩）、园主联系方式、可达性、历史授粉年份 | `orchards` |
-| BeeColony 蜂群 | 群号、蜂种、群势（足框）、箱型、当前所在地块、状态（待投放/在园/转场中/回场）、最近检查日期、健康备注 | `colonies` |
-| DropPoint 投放点 | 所属地块、坐标、编号、可容纳箱数、遮阴条件、水源距离、投放时间窗、撤场时间、责任人、安排群号 | `dropPoints` |
-| TransitRoute 转场路线 | 出发/到达投放点、预计里程与耗时、车辆类型、出发时刻、风险备注、实际记录 | `routes` |
+| Season 授粉季 | 季名、状态（进行中/已封存）、开季/封存时间 | `seasons` |
+| OrchardBase 地块底账 | 跨季档案：地块名、作物、面积、经纬度、园主、可达性、历史年份、备注 | `orchardBases` |
+| BeeColonyBase 蜂群底账 | 跨季身份：群号、蜂种、箱型 | `colonyBases` |
+| Orchard 地块（当季） | 底账快照 + 当季盛花期起止、需蜂强度 | `orchards`（`seasonId` + `baseId`） |
+| BeeColony 蜂群（当季） | 底账快照 + 当季群势、当前所在地块、状态、检查日期、健康备注 | `colonies`（`seasonId` + `baseId`） |
+| DropPoint 投放点 | 所属地块、坐标、编号、可容纳箱数、遮阴条件、水源距离、投放时间窗、撤场时间、责任人、安排群号 | `dropPoints`（`seasonId`） |
+| TransitRoute 转场路线 | 出发/到达投放点、预计里程与耗时、车辆类型、出发时刻、风险备注、实际记录 | `routes`（`seasonId`） |
 
-- 数据库名 `gbbeeroute`，`meta` 表保存 `schemaVersion`；
-- `version(2)` 升级迁移会为历史投放点补齐「可容纳箱数」（默认 8 箱）；
+- 数据库名 `gbbeeroute`，`meta` 表保存 `schemaVersion` 与当前查看季 `currentSeasonId`；
+- `version(2)` 为历史投放点补齐「可容纳箱数」（默认 8 箱）；`version(3)` 建立季账套、写 `seasonId` / `baseId` 并完成旧数据归档（规则见上表）；
 - 数据仅存于浏览器本地，容器无状态、不挂载命名卷。
 
 ## 七、主要页面
@@ -96,7 +112,7 @@ sologsb-1117/
 | `/orchards` | 果园地块管理：面积与需蜂强度自动算建议箱数、可达性标记、花期重叠提示、投放点维护（含坐标拾取） |
 | `/colonies` | 蜂群台账：按群势与状态筛选，批量改状态、批量记录检查备注 |
 | `/routes` | 转场路线规划：地图依次选点生成顺序与里程，拖动或上下移动调整顺序并实时重算，写回路线表 |
-| `/export` | 导出授粉安排清单 / 转场路线表（CSV）、全量 JSON 备份，并提供横向/纵向打印视图 |
+| `/export` | 导出当前授粉季的授粉安排清单 / 转场路线表（CSV）、自包含季账 JSON，并提供横向/纵向打印视图（封存季同样可导出） |
 
 ## 八、计算约定
 

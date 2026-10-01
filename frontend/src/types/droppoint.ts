@@ -1,6 +1,8 @@
-/** DropPoint 投放点 */
+/** DropPoint 投放点（仅属于单个授粉季，开季不结转） */
 export interface DropPoint {
   id: string
+  /** 所属授粉季 */
+  seasonId: string
   orchardId: string
   longitude: number
   latitude: number

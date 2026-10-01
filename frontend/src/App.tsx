@@ -5,6 +5,8 @@ import { orchardStore } from '@/stores/orchardStore'
 import { colonyStore } from '@/stores/colonyStore'
 import { droppointStore } from '@/stores/droppointStore'
 import { routeStore } from '@/stores/routeStore'
+import SeasonSwitcher, { SeasonLockedBanner } from '@/components/common/SeasonSwitcher'
+import { useCurrentSeason } from '@/hooks/useSeason'
 
 const { Sider, Header, Content } = Layout
 
@@ -16,12 +18,13 @@ const NAV = [
   { key: '/export', label: '导出与打印' }
 ]
 
-/** 应用外壳：左侧导航 + 顶部统计 + 路由出口 */
+/** 应用外壳：左侧导航 + 顶部授粉季切换 + 路由出口 */
 export default function AppLayout(): JSX.Element {
   const orchards = usePersistentStore(orchardStore, (state) => state.rows)
   const colonies = usePersistentStore(colonyStore, (state) => state.rows)
   const dropPoints = usePersistentStore(droppointStore, (state) => state.rows)
   const routes = usePersistentStore(routeStore, (state) => state.rows)
+  const currentSeason = useCurrentSeason()
 
   const totalKm = Math.round(routes.reduce((sum, item) => sum + item.distanceKm, 0) * 100) / 100
 
@@ -45,22 +48,28 @@ export default function AppLayout(): JSX.Element {
           }))}
         />
         <div style={{ padding: 16 }}>
+          <Statistic
+            title={<span style={{ color: '#a9b3ad', fontSize: 12 }}>当前授粉季</span>}
+            value={currentSeason?.name ?? '—'}
+            valueStyle={{ color: currentSeason?.status === 'active' ? '#f2c14e' : '#9aa7a0', fontSize: 16 }}
+          />
           <Statistic title={<span style={{ color: '#a9b3ad', fontSize: 12 }}>已入册地块</span>} value={orchards.length} valueStyle={{ color: '#f2c14e' }} />
           <Statistic title={<span style={{ color: '#a9b3ad', fontSize: 12 }}>蜂群 / 投放点</span>} value={`${colonies.length} / ${dropPoints.length}`} valueStyle={{ color: '#f2c14e', fontSize: 18 }} />
           <Statistic title={<span style={{ color: '#a9b3ad', fontSize: 12 }}>转场里程合计</span>} value={`${totalKm} km`} valueStyle={{ color: '#f2c14e', fontSize: 18 }} />
           <Typography.Paragraph style={{ color: '#7f8d82', fontSize: 11, marginTop: 12, marginBottom: 0 }}>
-            数据保存在浏览器 IndexedDB，无需后端服务
+            一季一份账，数据保存在浏览器 IndexedDB，无需后端服务
           </Typography.Paragraph>
         </div>
       </Sider>
       <Layout>
-        <Header style={{ background: '#fff', borderBottom: '1px solid #e6ecf1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: 24 }}>
-          <Typography.Text strong>果园地块 → 花期 → 蜂群投放点 → 转场路线</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            地图优先使用高德 JS API，未配置 key 时自动降级为本地 SVG 网格视图
+        <Header style={{ background: '#fff', borderBottom: '1px solid #e6ecf1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingInline: 24 }}>
+          <Typography.Text strong ellipsis style={{ flexShrink: 0 }}>
+            果园地块 → 花期 → 蜂群投放点 → 转场路线
           </Typography.Text>
+          <SeasonSwitcher />
         </Header>
         <Content style={{ padding: 20 }}>
+          <SeasonLockedBanner />
           <Outlet />
         </Content>
       </Layout>

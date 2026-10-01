@@ -5,14 +5,16 @@ import type { BeeColony, ColonyStatus } from '@/types'
 import { BEE_SPECIES, BOX_TYPES, COLONY_STATUSES } from '@/types'
 import StatusTag from '@/components/common/StatusTag'
 import { usePersistentStore } from '@/hooks/usePersistentStore'
-import { colonyStore } from '@/stores/colonyStore'
+import { colonyStore, type ColonyDraft } from '@/stores/colonyStore'
 import { orchardStore } from '@/stores/orchardStore'
+import { useSeasonLocked } from '@/hooks/useSeason'
 import { uid } from '@/utils/id'
 
 /** 蜂群台账：按群势与状态筛选，支持批量改状态与记录检查备注 */
 export default function ColoniesPage(): JSX.Element {
   const colonies = usePersistentStore(colonyStore, (state) => state.rows)
   const orchards = usePersistentStore(orchardStore, (state) => state.rows)
+  const locked = useSeasonLocked()
 
   const [statusFilter, setStatusFilter] = useState<ColonyStatus | ''>('')
   const [minFrames, setMinFrames] = useState(0)
@@ -83,7 +85,7 @@ export default function ColoniesPage(): JSX.Element {
       message.error(`群号 ${values.code} 已存在`)
       return
     }
-    const row: BeeColony = {
+    const draft: ColonyDraft = {
       id: editing?.id ?? uid('col'),
       code: values.code.trim(),
       species: values.species,
@@ -94,8 +96,8 @@ export default function ColoniesPage(): JSX.Element {
       lastCheckDate: values.lastCheckDate.format('YYYY-MM-DD'),
       healthNote: values.healthNote?.trim() ?? ''
     }
-    await colonyStore.getState().save(row)
-    message.success(`蜂群 ${row.code} 已保存`)
+    await colonyStore.getState().save(draft)
+    message.success(`蜂群 ${draft.code} 已保存`)
     setModalOpen(false)
   }
 
@@ -132,7 +134,7 @@ export default function ColoniesPage(): JSX.Element {
             按群势与状态筛选蜂群；支持多选批量改状态与统一记录检查备注（会同步最近检查日期）。
           </p>
         </div>
-        <Button type="primary" onClick={openCreate}>
+        <Button type="primary" onClick={openCreate} disabled={locked}>
           新增蜂群
         </Button>
       </div>
@@ -161,18 +163,20 @@ export default function ColoniesPage(): JSX.Element {
               <Select
                 style={{ width: 140 }}
                 value={batchStatus}
+                disabled={locked}
                 onChange={(value) => setBatchStatus(value)}
                 options={COLONY_STATUSES.map((item) => ({ value: item, label: `改为 ${item}` }))}
               />
-              <Button onClick={() => void applyBatchStatus()}>批量改状态</Button>
+              <Button disabled={locked} onClick={() => void applyBatchStatus()}>批量改状态</Button>
               <Input
                 style={{ width: 200 }}
                 placeholder="检查备注"
+                disabled={locked}
                 value={checkNote}
                 onChange={(event) => setCheckNote(event.target.value)}
               />
-              <DatePicker value={checkDate} onChange={(value) => setCheckDate(value ?? dayjs())} />
-              <Button onClick={() => void applyCheckNote()}>批量记录检查</Button>
+              <DatePicker value={checkDate} disabled={locked} onChange={(value) => setCheckDate(value ?? dayjs())} />
+              <Button disabled={locked} onClick={() => void applyCheckNote()}>批量记录检查</Button>
             </Space>
           </Col>
         </Row>
@@ -183,7 +187,7 @@ export default function ColoniesPage(): JSX.Element {
           dataSource={filtered}
           rowKey="id"
           pagination={false}
-          rowSelection={{ selectedRowKeys: selectedKeys, onChange: (keys) => setSelectedKeys(keys as string[]) }}
+          rowSelection={{ selectedRowKeys: selectedKeys, onChange: (keys) => setSelectedKeys(keys as string[]), getCheckboxProps: () => ({ disabled: locked }) }}
           columns={[
             { title: '群号', dataIndex: 'code', key: 'code', width: 90 },
             { title: '蜂种', dataIndex: 'species', key: 'species', width: 80 },
@@ -215,10 +219,10 @@ export default function ColoniesPage(): JSX.Element {
               width: 140,
               render: (_, record: BeeColony) => (
                 <Space>
-                  <Button size="small" type="link" onClick={() => openEdit(record)}>
+                  <Button size="small" type="link" disabled={locked} onClick={() => openEdit(record)}>
                     编辑
                   </Button>
-                  <Button size="small" type="link" danger onClick={() => void colonyStore.getState().remove(record.id)}>
+                  <Button size="small" type="link" danger disabled={locked} onClick={() => void colonyStore.getState().remove(record.id)}>
                     删除
                   </Button>
                 </Space>
@@ -239,7 +243,7 @@ export default function ColoniesPage(): JSX.Element {
         </Space>
       </Card>
 
-      <Modal title={editing ? '编辑蜂群' : '新增蜂群'} open={modalOpen} onCancel={() => setModalOpen(false)} onOk={() => void submit()} okText="保存" width={680}>
+      <Modal title={editing ? '编辑蜂群' : '新增蜂群'} open={modalOpen} onCancel={() => setModalOpen(false)} onOk={() => void submit()} okText="保存" width={680} okButtonProps={{ disabled: locked }}>
         <Form form={form} layout="vertical">
           <Row gutter={12}>
             <Col span={8}>

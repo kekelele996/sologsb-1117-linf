@@ -9,6 +9,7 @@ import { colonyStore } from '@/stores/colonyStore'
 import { droppointStore } from '@/stores/droppointStore'
 import { routeStore } from '@/stores/routeStore'
 import { downloadCsv, downloadJson } from '@/utils/export'
+import { useCurrentSeason } from '@/hooks/useSeason'
 import { bloomDays } from '@/utils/geo'
 
 interface ScheduleExportRow {
@@ -32,6 +33,13 @@ export default function ExportPage(): JSX.Element {
   const dropPoints = usePersistentStore(droppointStore, (state) => state.rows)
   const routes = usePersistentStore(routeStore, (state) => state.rows)
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('landscape')
+  const currentSeason = useCurrentSeason()
+
+  /** 文件名安全片段（去掉路径分隔符等字符） */
+  const seasonFilePart = (): string =>
+    (currentSeason?.name ?? '授粉季')
+      .replace(/[\\/:*?"<>|\s]+/g, '_')
+      .replace(/^_+|_+$/g, '') || '授粉季'
 
   const orchardName = (id: string): string => orchards.find((item) => item.id === id)?.name ?? '未知地块'
 
@@ -100,7 +108,7 @@ export default function ExportPage(): JSX.Element {
   )
 
   function exportSchedule(): void {
-    downloadCsv('授粉安排清单.csv', scheduleRows as unknown as Record<string, unknown>[], [
+    downloadCsv(`${seasonFilePart()}-授粉安排清单.csv`, scheduleRows as unknown as Record<string, unknown>[], [
       { key: 'orchard', label: '地块' },
       { key: 'crop', label: '作物' },
       { key: 'areaMu', label: '面积(亩)' },
@@ -113,11 +121,11 @@ export default function ExportPage(): JSX.Element {
       { key: 'withdrawTime', label: '撤场时间' },
       { key: 'owner', label: '责任人' }
     ])
-    message.success('授粉安排清单已导出')
+    message.success(`「${currentSeason?.name ?? ''}」授粉安排清单已导出`)
   }
 
   function exportRoutes(): void {
-    downloadCsv('转场路线表.csv', routeRows as unknown as Record<string, unknown>[], [
+    downloadCsv(`${seasonFilePart()}-转场路线表.csv`, routeRows as unknown as Record<string, unknown>[], [
       { key: 'from', label: '出发投放点' },
       { key: 'to', label: '到达投放点' },
       { key: 'distanceKm', label: '里程(km)' },
@@ -127,18 +135,29 @@ export default function ExportPage(): JSX.Element {
       { key: 'riskNote', label: '途中风险' },
       { key: 'actualNote', label: '实际记录' }
     ])
-    message.success('转场路线表已导出')
+    message.success(`「${currentSeason?.name ?? ''}」转场路线表已导出`)
   }
 
   function exportBackup(): void {
-    downloadJson('gbbeeroute-backup.json', {
+    // 一份导出只含当前季，自包含（封存往季导出后脱离应用仍可完整查阅）
+    downloadJson(`${seasonFilePart()}-gbbeeroute季账.json`, {
       exportedAt: new Date().toISOString(),
+      season: currentSeason
+        ? {
+            id: currentSeason.id,
+            name: currentSeason.name,
+            status: currentSeason.status,
+            startedAt: currentSeason.startedAt,
+            sealedAt: currentSeason.sealedAt,
+            note: currentSeason.note
+          }
+        : null,
       orchards,
       colonies,
       dropPoints,
       routes
     })
-    message.success('全量数据已导出为 JSON 备份')
+    message.success(`「${currentSeason?.name ?? ''}」全量季账已导出为 JSON`)
   }
 
   return (
@@ -148,7 +167,7 @@ export default function ExportPage(): JSX.Element {
         <div>
           <h2 className="page-title">导出与打印</h2>
           <p className="page-sub">
-            导出授粉安排清单（地块、群号、投放点、时刻、里程）与转场路线表，或直接使用打印视图现场交底。
+            导出当前授粉季「{currentSeason?.name ?? '—'}」{currentSeason?.status === 'sealed' ? '（已封存，仅可查看与导出）' : ''}的授粉安排清单与转场路线表，或直接使用打印视图现场交底。
           </p>
         </div>
         <Space>
@@ -167,6 +186,9 @@ export default function ExportPage(): JSX.Element {
           </Button>
           <Button onClick={exportRoutes}>导出转场路线表（CSV）</Button>
           <Button onClick={exportBackup}>导出全量 JSON 备份</Button>
+          <Tag color={currentSeason?.status === 'active' ? 'green' : 'default'}>
+            {currentSeason?.name ?? '未知授粉季'}{currentSeason?.status === 'sealed' ? ' · 已封存' : ' · 当季'}
+          </Tag>
           <Tag>地块 {orchards.length}</Tag>
           <Tag>蜂群 {colonies.length}</Tag>
           <Tag>投放点 {dropPoints.length}</Tag>

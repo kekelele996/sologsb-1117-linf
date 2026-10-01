@@ -6,9 +6,10 @@ import { ACCESSIBILITIES, CROPS, suggestColonyBoxes } from '@/types'
 import CoordPicker from '@/components/common/CoordPicker'
 import FlowerWindowBar from '@/components/common/FlowerWindowBar'
 import { usePersistentStore } from '@/hooks/usePersistentStore'
-import { orchardStore } from '@/stores/orchardStore'
-import { droppointStore } from '@/stores/droppointStore'
+import { orchardStore, type OrchardDraft } from '@/stores/orchardStore'
+import { droppointStore, type DropPointDraft } from '@/stores/droppointStore'
 import { colonyStore } from '@/stores/colonyStore'
+import { useSeasonLocked } from '@/hooks/useSeason'
 import { bloomDays } from '@/utils/geo'
 import { uid } from '@/utils/id'
 
@@ -40,6 +41,7 @@ export default function OrchardsPage(): JSX.Element {
   const orchards = usePersistentStore(orchardStore, (state) => state.rows)
   const dropPoints = usePersistentStore(droppointStore, (state) => state.rows)
   const colonies = usePersistentStore(colonyStore, (state) => state.rows)
+  const locked = useSeasonLocked()
 
   const [orchardModal, setOrchardModal] = useState(false)
   const [editingOrchard, setEditingOrchard] = useState<Orchard | null>(null)
@@ -99,7 +101,7 @@ export default function OrchardsPage(): JSX.Element {
 
   async function submitOrchard(): Promise<void> {
     const values = await orchardForm.validateFields()
-    const row: Orchard = {
+    const draft: OrchardDraft = {
       id: editingOrchard?.id ?? uid('orc'),
       name: values.name.trim(),
       crop: values.crop,
@@ -117,8 +119,8 @@ export default function OrchardsPage(): JSX.Element {
         .filter((item) => Number.isFinite(item) && item > 0),
       note: values.note?.trim() ?? ''
     }
-    await orchardStore.getState().save(row)
-    message.success(`地块「${row.name}」已保存，建议蜂群 ${suggestColonyBoxes(row)} 箱`)
+    await orchardStore.getState().save(draft)
+    message.success(`地块「${draft.name}」已保存，建议蜂群 ${suggestColonyBoxes(draft)} 箱`)
     setOrchardModal(false)
   }
 
@@ -152,7 +154,7 @@ export default function OrchardsPage(): JSX.Element {
   async function submitDrop(): Promise<void> {
     if (!dropOwner) return
     const values = await dropForm.validateFields()
-    const row: DropPoint = {
+    const draft: DropPointDraft = {
       id: uid('dp'),
       orchardId: dropOwner.id,
       longitude: dropCoord.longitude,
@@ -166,8 +168,8 @@ export default function OrchardsPage(): JSX.Element {
       owner: values.owner?.trim() ?? '',
       colonyCodes: values.colonyCodes ?? []
     }
-    await droppointStore.getState().save(row)
-    message.success(`投放点 ${row.code} 已保存`)
+    await droppointStore.getState().save(draft)
+    message.success(`投放点 ${draft.code} 已保存`)
     setDropModal(false)
   }
 
@@ -180,7 +182,7 @@ export default function OrchardsPage(): JSX.Element {
             录入面积与需蜂强度后自动算出建议箱数；可达性以标签标记。每个地块可维护多个蜂群投放点（含可容纳箱数与时间窗）。
           </p>
         </div>
-        <Button type="primary" onClick={openCreate}>
+        <Button type="primary" onClick={openCreate} disabled={locked}>
           新建地块
         </Button>
       </div>
@@ -202,13 +204,13 @@ export default function OrchardsPage(): JSX.Element {
               }
               extra={
                 <Space>
-                  <Button size="small" onClick={() => openEdit(orchard)}>
+                  <Button size="small" onClick={() => openEdit(orchard)} disabled={locked}>
                     编辑
                   </Button>
-                  <Button size="small" onClick={() => openDrop(orchard)}>
+                  <Button size="small" onClick={() => openDrop(orchard)} disabled={locked}>
                     新增投放点
                   </Button>
-                  <Button size="small" danger onClick={() => void removeOrchard(orchard)}>
+                  <Button size="small" danger onClick={() => void removeOrchard(orchard)} disabled={locked}>
                     删除
                   </Button>
                 </Space>
@@ -242,7 +244,7 @@ export default function OrchardsPage(): JSX.Element {
                     key: 'action',
                     width: 80,
                     render: (_, record: DropPoint) => (
-                      <Button size="small" danger type="link" onClick={() => void droppointStore.getState().remove(record.id)}>
+                      <Button size="small" danger type="link" disabled={locked} onClick={() => void droppointStore.getState().remove(record.id)}>
                         删除
                       </Button>
                     )
@@ -254,7 +256,7 @@ export default function OrchardsPage(): JSX.Element {
         ))}
       </Row>
 
-      <Modal title={editingOrchard ? '编辑地块' : '新建地块'} open={orchardModal} onCancel={() => setOrchardModal(false)} onOk={() => void submitOrchard()} width={720} okText="保存">
+      <Modal title={editingOrchard ? '编辑地块' : '新建地块'} open={orchardModal} onCancel={() => setOrchardModal(false)} onOk={() => void submitOrchard()} width={720} okText="保存" okButtonProps={{ disabled: locked }}>
         <Form form={orchardForm} layout="vertical">
           <Row gutter={12}>
             <Col span={12}>
@@ -317,6 +319,7 @@ export default function OrchardsPage(): JSX.Element {
         onOk={() => void submitDrop()}
         width={720}
         okText="保存"
+        okButtonProps={{ disabled: locked }}
       >
         <Form form={dropForm} layout="vertical">
           <Row gutter={12}>

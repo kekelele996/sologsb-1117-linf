@@ -5,20 +5,16 @@ import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { AppRoutes } from '@/router'
 import { seedDemoData, stampDbVersion } from '@/hooks/usePersistentStore'
-import { orchardStore } from '@/stores/orchardStore'
-import { colonyStore } from '@/stores/colonyStore'
-import { droppointStore } from '@/stores/droppointStore'
-import { routeStore } from '@/stores/routeStore'
+import { seasonStore } from '@/stores/seasonStore'
+import { rehydrateSeasonStores } from '@/hooks/useSeason'
 import '@/styles/index.css'
 
-/** 启动：写入示例数据（仅首次）→ 记录 schemaVersion → 从 IndexedDB 水合全部 store */
+/** 启动：写入示例数据（仅首次）→ 记录 schemaVersion → 定季 → 按当前季水合各 store */
 async function bootstrap(): Promise<void> {
   await seedDemoData()
   await stampDbVersion()
-  await orchardStore.getState().hydrate()
-  await colonyStore.getState().hydrate()
-  await droppointStore.getState().hydrate()
-  await routeStore.getState().hydrate()
+  await seasonStore.getState().hydrate()
+  await rehydrateSeasonStores(seasonStore.getState().currentSeasonId)
 }
 
 void bootstrap()

@@ -8,6 +8,7 @@ import { usePersistentStore } from '@/hooks/usePersistentStore'
 import { orchardStore } from '@/stores/orchardStore'
 import { droppointStore } from '@/stores/droppointStore'
 import { routeStore } from '@/stores/routeStore'
+import { useSeasonLocked } from '@/hooks/useSeason'
 import { distanceKm, estimateDurationH, routeLegs } from '@/utils/geo'
 
 /** 转场路线规划：地图上依次选点生成顺序与里程，支持拖动调整顺序并重算 */
@@ -15,6 +16,7 @@ export default function RoutesPage(): JSX.Element {
   const orchards = usePersistentStore(orchardStore, (state) => state.rows)
   const dropPoints = usePersistentStore(droppointStore, (state) => state.rows)
   const routes = usePersistentStore(routeStore, (state) => state.rows)
+  const locked = useSeasonLocked()
 
   const [orderedIds, setOrderedIds] = useState<string[]>([])
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -89,8 +91,8 @@ export default function RoutesPage(): JSX.Element {
           </p>
         </div>
         <Space>
-          <Button onClick={() => setOrderedIds([])}>清空顺序</Button>
-          <Button type="primary" onClick={() => void generate()}>
+          <Button onClick={() => setOrderedIds([])} disabled={locked}>清空顺序</Button>
+          <Button type="primary" disabled={locked} onClick={() => void generate()}>
             生成并保存路线
           </Button>
         </Space>
@@ -118,7 +120,7 @@ export default function RoutesPage(): JSX.Element {
                     <Tag color="blue">{point.code}</Tag>
                     {orchardName(point.orchardId)} · 可容纳 {point.capacityBoxes} 箱 · 水源 {point.waterDistance} m
                   </span>
-                  <Button size="small" onClick={() => addPoint(point.id)}>
+                  <Button size="small" disabled={locked} onClick={() => addPoint(point.id)}>
                     加入顺序
                   </Button>
                 </Space>
@@ -135,7 +137,7 @@ export default function RoutesPage(): JSX.Element {
                 {ordered.map((point, index) => (
                   <div
                     key={point.id}
-                    draggable
+                    draggable={!locked}
                     onDragStart={() => setDraggingId(point.id)}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={() => handleDrop(point.id)}
@@ -159,13 +161,13 @@ export default function RoutesPage(): JSX.Element {
                         </Typography.Text>
                       ) : null}
                     </span>
-                    <Button size="small" disabled={index === 0} onClick={() => move(index, -1)}>
+                    <Button size="small" disabled={locked || index === 0} onClick={() => move(index, -1)}>
                       上移
                     </Button>
-                    <Button size="small" disabled={index === ordered.length - 1} onClick={() => move(index, 1)}>
+                    <Button size="small" disabled={locked || index === ordered.length - 1} onClick={() => move(index, 1)}>
                       下移
                     </Button>
-                    <Button size="small" danger type="link" onClick={() => removePoint(point.id)}>
+                    <Button size="small" danger type="link" disabled={locked} onClick={() => removePoint(point.id)}>
                       移除
                     </Button>
                   </div>
@@ -176,17 +178,17 @@ export default function RoutesPage(): JSX.Element {
               <Row gutter={12}>
                 <Col span={12}>
                   <Form.Item label="车辆类型" style={{ marginBottom: 8 }}>
-                    <Select value={vehicleType} onChange={(value) => setVehicleType(value)} options={VEHICLE_TYPES.map((item) => ({ value: item, label: item }))} />
+                    <Select disabled={locked} value={vehicleType} onChange={(value) => setVehicleType(value)} options={VEHICLE_TYPES.map((item) => ({ value: item, label: item }))} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item label="首段出发时刻" style={{ marginBottom: 8 }}>
-                    <DatePicker showTime value={departAt} onChange={(value) => setDepartAt(value ?? dayjs())} style={{ width: '100%' }} />
+                    <DatePicker disabled={locked} showTime value={departAt} onChange={(value) => setDepartAt(value ?? dayjs())} style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
                 <Col span={24}>
                   <Form.Item label="途中风险备注" style={{ marginBottom: 0 }}>
-                    <Input value={riskNote} onChange={(event) => setRiskNote(event.target.value)} placeholder="如 西沟坡道窄，雨天泥泞" />
+                    <Input disabled={locked} value={riskNote} onChange={(event) => setRiskNote(event.target.value)} placeholder="如 西沟坡道窄，雨天泥泞" />
                   </Form.Item>
                 </Col>
               </Row>
@@ -228,7 +230,7 @@ export default function RoutesPage(): JSX.Element {
               key: 'action',
               width: 80,
               render: (_, record: TransitRoute) => (
-                <Button size="small" danger type="link" onClick={() => void routeStore.getState().remove(record.id)}>
+                <Button size="small" danger type="link" disabled={locked} onClick={() => void routeStore.getState().remove(record.id)}>
                   删除
                 </Button>
               )

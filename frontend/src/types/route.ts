@@ -2,9 +2,11 @@
 export const VEHICLE_TYPES = ['厢式货车', '农用三轮', '皮卡', '人工搬运'] as const
 export type VehicleType = (typeof VEHICLE_TYPES)[number]
 
-/** TransitRoute 转场路线 */
+/** TransitRoute 转场路线（仅属于单个授粉季，开季不结转） */
 export interface TransitRoute {
   id: string
+  /** 所属授粉季 */
+  seasonId: string
   /** 出发投放点 */
   fromDropId: string
   /** 到达投放点 */
